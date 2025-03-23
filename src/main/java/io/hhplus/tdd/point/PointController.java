@@ -44,7 +44,7 @@ public class PointController {
     public UserPoint charge(
             @PathVariable long id,
             @RequestBody long amount
-    ) throws Exception {
+    ) {
 
         return pointService.charge(id, amount);
     }
@@ -56,7 +56,7 @@ public class PointController {
     public UserPoint use(
             @PathVariable long id,
             @RequestBody long amount
-    ) throws Exception {
+    ) {
 
         return pointService.use(id, amount);
     }
