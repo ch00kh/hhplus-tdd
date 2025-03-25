@@ -27,7 +27,7 @@ public class PointService {
     public UserPoint charge(Long id, Long amount) {
 
         if (amount <= 0) {
-            throw new PointException(PointErrorCode.INVALID_INPUT);
+            throw new PointException(PointErrorCode.NON_POSITIVE_AMOUNT);
         }
 
         UserPoint userPoint = userPointTable.selectById(id);
