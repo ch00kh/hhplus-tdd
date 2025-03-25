@@ -100,9 +100,9 @@ class PointServiceTest {
     }
 
     @Test
-    @DisplayName("0이하 포인트 충전")
+    @DisplayName("포인트 충전 - 충전 포인트 0이하 예외")
     void nonPositiveAmountChargeTest() {
-        List<Long> nonPositiveAmounts = List.of(-1000L, 0L);
+        List<Long> nonPositiveAmounts = List.of(-1000L, 0L); // 음수, 경계값 0 충전
 
         for (Long nonPositiveAmount : nonPositiveAmounts) {
 
@@ -116,13 +116,12 @@ class PointServiceTest {
     }
 
     @Test
-    @DisplayName("100,000 초과 포인트 충전")
+    @DisplayName("포인트 충전 - 충전된 포인트가 100,000 초과인 경우 예외")
     void maxPointExceedChargeTest() {
-
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint);
+                .willReturn(userPoint); // 1000L
 
-        List<Long> exceedAmounts = List.of(99001L, 1000000L);
+        List<Long> exceedAmounts = List.of(99001L, 1000000L); // 100001, 1001000
 
         for (Long exceedAmount : exceedAmounts) {
 
@@ -136,30 +135,31 @@ class PointServiceTest {
     }
 
     @Test
-    @DisplayName("충전")
+    @DisplayName("포인트 충전")
     void chargeTest() {
-
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint);
+                .willReturn(userPoint); // 1000L
 
-        given(userPointTable.insertOrUpdate(USER_ID, 11000L))
-                .willReturn(new UserPoint(USER_ID, 11000L, System.currentTimeMillis()));
+        long chargingPoint = 99000L;
+        long remainingPoint = userPoint.point() + chargingPoint; // 99000 + 1000  = 100000
 
 
-        UserPoint actualUserPoint = pointService.charge(USER_ID, 10000L);
+        given(userPointTable.insertOrUpdate(USER_ID, remainingPoint))
+                .willReturn(new UserPoint(USER_ID, remainingPoint, System.currentTimeMillis()));
+
+        UserPoint actualUserPoint = pointService.charge(USER_ID, chargingPoint);
 
         assertThat(actualUserPoint.id()).isEqualTo(USER_ID);
-        assertThat(actualUserPoint.point()).isEqualTo(11000L);
+        assertThat(actualUserPoint.point()).isEqualTo(remainingPoint);
     }
 
     @Test
-    @DisplayName("포인트 사용시 잔여 포인트가 0이하인 경우")
+    @DisplayName("포인트 사용 - 잔여 포인트가 0이하인 경우 예외")
     void notEnoughPointUseTest() {
-
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint); // 기존 1000L
+                .willReturn(userPoint); // 기존 1000
 
-        List<Long> notEnoughPoints = List.of(10000L, 1001L);
+        List<Long> notEnoughPoints = List.of(10000L, 1001L); // 1000-10000 = -9000 , 1000-1001 = -1
 
         for (Long notEnoughPoint : notEnoughPoints) {
 
@@ -176,13 +176,13 @@ class PointServiceTest {
     @DisplayName("포인트 사용")
     void useTest() {
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint);
+                .willReturn(userPoint); // 기존 1000
 
         long usingPoint = 1000L;
-        long remainingPoint = userPoint.point() - usingPoint;
+        long remainingPoint = userPoint.point() - usingPoint; // 1000 - 1000 = 0
 
         given(userPointTable.insertOrUpdate(USER_ID, remainingPoint))
-                .willReturn(new UserPoint(USER_ID, 0L, System.currentTimeMillis()));
+                .willReturn(new UserPoint(USER_ID, remainingPoint, System.currentTimeMillis()));
 
         UserPoint actualUserPoint = pointService.use(USER_ID, usingPoint);
 
