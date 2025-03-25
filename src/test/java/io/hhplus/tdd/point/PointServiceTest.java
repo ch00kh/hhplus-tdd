@@ -15,6 +15,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,12 +30,16 @@ class PointServiceTest {
     private final Long USER_POINT = 1000L;
     private UserPoint userPoint;
     private UserPoint emptyUserPoint;
+    private Lock lock = new ReentrantLock();
 
     @Mock
     PointHistoryTable pointHistoryTable;
 
     @Mock
     UserPointTable userPointTable;
+
+    @Mock
+    LockManager lockManager;
 
     @InjectMocks
     PointService pointService;
@@ -129,6 +136,9 @@ class PointServiceTest {
     @DisplayName("포인트 충전 - 충전된 포인트가 100,000 초과인 경우 예외")
     void maxPointExceedChargeTest() {
         // given
+        given(lockManager.getLock(USER_ID))
+                .willReturn(lock);
+
         given(userPointTable.selectById(USER_ID))
                 .willReturn(emptyUserPoint); // 잔여: 0L
 
@@ -142,6 +152,9 @@ class PointServiceTest {
     @DisplayName("포인트 충전")
     void chargeTest() {
         // given
+        given(lockManager.getLock(USER_ID))
+                .willReturn(lock);
+
         given(userPointTable.selectById(USER_ID))
                 .willReturn(userPoint); // 잔여: 1000L
 
@@ -163,6 +176,9 @@ class PointServiceTest {
     @DisplayName("포인트 사용 - 잔여 포인트가 0이하인 경우 예외")
     void notEnoughPointUseTest() {
         // given
+        given(lockManager.getLock(USER_ID))
+                .willReturn(lock);
+
         given(userPointTable.selectById(USER_ID))
                 .willReturn(emptyUserPoint); // 잔여: 0L
 
@@ -187,6 +203,9 @@ class PointServiceTest {
     @DisplayName("포인트 사용")
     void useTest() {
         // given
+        given(lockManager.getLock(USER_ID))
+                .willReturn(lock);
+
         given(userPointTable.selectById(USER_ID))
                 .willReturn(userPoint); // 기존: 1000L
 
