@@ -31,6 +31,8 @@ public class PointService {
         }
 
         UserPoint userPoint = userPointTable.selectById(id);
+
+
         long chargedPoint = userPoint.point() + amount;
 
         if (chargedPoint > 100000L) {
@@ -43,6 +45,10 @@ public class PointService {
     }
 
     public UserPoint use(long id, long amount) {
+
+        if (amount <= 0) {
+            throw new PointException(PointErrorCode.NON_POSITIVE_AMOUNT);
+        }
 
         UserPoint userPoint = userPointTable.selectById(id);
         long usedPoint = userPoint.point() - amount;

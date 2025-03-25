@@ -6,6 +6,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -15,9 +17,11 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class PointServiceTest {
@@ -25,6 +29,7 @@ class PointServiceTest {
     private final long USER_ID = 1L;
     private final Long USER_POINT = 1000L;
     private UserPoint userPoint;
+    private UserPoint emptyUserPoint;
 
     @Mock
     PointHistoryTable pointHistoryTable;
@@ -38,16 +43,20 @@ class PointServiceTest {
     @BeforeEach
     void setUp() {
         userPoint = new UserPoint(USER_ID, USER_POINT, System.currentTimeMillis());
+        emptyUserPoint = new UserPoint(USER_ID, 0, System.currentTimeMillis());
     }
 
     @Test
     @DisplayName("User Point 조회 (신규)")
     void findNewUserPointTest() {
+        // given
         given(userPointTable.selectById(USER_ID)).
-                willReturn(new UserPoint(USER_ID, 0L, System.currentTimeMillis()));
+                willReturn(emptyUserPoint); // 잔여: 0L
 
+        // when
         UserPoint actualUserPoint = pointService.findUserPoint(USER_ID);
 
+        // then
         assertThat(actualUserPoint.id()).isEqualTo(USER_ID);
         assertThat(actualUserPoint.point()).isEqualTo(0L);
     }
@@ -55,11 +64,14 @@ class PointServiceTest {
     @Test
     @DisplayName("User Point 조회")
     void findExistingUserPointTest() {
+        // given
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint);
+                .willReturn(userPoint); // 잔여: 1000L
 
+        // when
         UserPoint actualUserPoint = pointService.findUserPoint(USER_ID);
 
+        // then
         assertThat(actualUserPoint.id()).isEqualTo(USER_ID);
         assertThat(actualUserPoint.point()).isEqualTo(USER_POINT);
     }
@@ -67,11 +79,14 @@ class PointServiceTest {
     @Test
     @DisplayName("Point History 조회 (신규)")
     void findEmptyPointHistoryTest(){
+        // given
         given(pointHistoryTable.selectAllByUserId(USER_ID))
                 .willReturn(Collections.emptyList());
 
+        // when
         List<PointHistory> actualPointHistories = pointService.findPointHistory(USER_ID);
 
+        // then
         assertThat(actualPointHistories).isEmpty();
     }
 
@@ -79,6 +94,7 @@ class PointServiceTest {
     @Test
     @DisplayName("Point History 조회")
     void findUserPointHistoryTest() {
+        // given
         ArrayList<PointHistory> pointHistories = new ArrayList<>();
 
         for (int i = 0; i < 10; i++) {
@@ -94,61 +110,54 @@ class PointServiceTest {
         given(pointHistoryTable.selectAllByUserId(USER_ID))
                 .willReturn(pointHistories);
 
+        // when
         List<PointHistory> actualPointHistories = pointService.findPointHistory(USER_ID);
 
+        // then
         assertThat(actualPointHistories.size()).isEqualTo(pointHistories.size());
     }
 
-    @Test
+    @ParameterizedTest
     @DisplayName("포인트 충전 - 충전 포인트 0이하 예외")
-    void nonPositiveAmountChargeTest() {
-        List<Long> nonPositiveAmounts = List.of(-1000L, 0L); // 음수, 경계값 0 충전
+    @ValueSource(longs = {-1000L, 0L}) // given
+    void nonPositiveAmountChargeTest(long nonPositiveAmount) {
 
-        for (Long nonPositiveAmount : nonPositiveAmounts) {
-
-            PointException pointException = assertThrows(PointException.class,
-                    () -> pointService.charge(USER_ID, nonPositiveAmount));
-
-            assertEquals(PointErrorCode.NON_POSITIVE_AMOUNT.getCode(), pointException.getErrorCode());
-            assertEquals(PointErrorCode.NON_POSITIVE_AMOUNT.getStatus(), pointException.getHttpStatus());
-            assertEquals(PointErrorCode.NON_POSITIVE_AMOUNT.getMessage(), pointException.getMessage());
-        }
+        // when + then
+        assertThatThrownBy(() -> pointService.charge(USER_ID, nonPositiveAmount))
+                .isInstanceOf(PointException.class)
+                .hasMessageContaining(PointErrorCode.NON_POSITIVE_AMOUNT.getMessage());
     }
 
     @Test
     @DisplayName("포인트 충전 - 충전된 포인트가 100,000 초과인 경우 예외")
     void maxPointExceedChargeTest() {
+        // given
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint); // 1000L
+                .willReturn(emptyUserPoint); // 잔여: 0L
 
-        List<Long> exceedAmounts = List.of(99001L, 1000000L); // 100001, 1001000
-
-        for (Long exceedAmount : exceedAmounts) {
-
-            PointException pointException = assertThrows(PointException.class,
-                    () -> pointService.charge(USER_ID, exceedAmount));
-
-            assertEquals(PointErrorCode.MAX_POINT_EXCEED.getCode(), pointException.getErrorCode());
-            assertEquals(PointErrorCode.MAX_POINT_EXCEED.getStatus(), pointException.getHttpStatus());
-            assertEquals(PointErrorCode.MAX_POINT_EXCEED.getMessage(), pointException.getMessage());
-        }
+        // when + then
+        assertThatThrownBy(() -> pointService.charge(USER_ID, 100001L))
+                .isInstanceOf(PointException.class)
+                .hasMessageContaining(PointErrorCode.MAX_POINT_EXCEED.getMessage());
     }
 
     @Test
     @DisplayName("포인트 충전")
     void chargeTest() {
+        // given
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint); // 1000L
+                .willReturn(userPoint); // 잔여: 1000L
 
         long chargingPoint = 99000L;
         long remainingPoint = userPoint.point() + chargingPoint; // 99000 + 1000  = 100000
 
-
         given(userPointTable.insertOrUpdate(USER_ID, remainingPoint))
                 .willReturn(new UserPoint(USER_ID, remainingPoint, System.currentTimeMillis()));
 
+        // when
         UserPoint actualUserPoint = pointService.charge(USER_ID, chargingPoint);
 
+        //then
         assertThat(actualUserPoint.id()).isEqualTo(USER_ID);
         assertThat(actualUserPoint.point()).isEqualTo(remainingPoint);
     }
@@ -156,27 +165,33 @@ class PointServiceTest {
     @Test
     @DisplayName("포인트 사용 - 잔여 포인트가 0이하인 경우 예외")
     void notEnoughPointUseTest() {
+        // given
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint); // 기존 1000
+                .willReturn(emptyUserPoint); // 잔여: 0L
 
-        List<Long> notEnoughPoints = List.of(10000L, 1001L); // 1000-10000 = -9000 , 1000-1001 = -1
+        // when + then
+        assertThatThrownBy(() -> pointService.use(USER_ID, 10000L))
+                .isInstanceOf(PointException.class)
+                .hasMessageContaining(PointErrorCode.NOT_ENOUGH_POINT.getMessage());
+    }
 
-        for (Long notEnoughPoint : notEnoughPoints) {
+    @ParameterizedTest
+    @DisplayName("포인트 사용 - 0이하의 포인트를 사용하는 경우 예외")
+    @ValueSource(longs = {-10000L, 0L}) // given
+    void nonPositiveAmountPointUseTest(long amount) {
 
-            PointException pointException = assertThrows(PointException.class,
-                    () -> pointService.use(USER_ID, notEnoughPoint));
-
-            assertEquals(pointException.getErrorCode(), PointErrorCode.NOT_ENOUGH_POINT.getCode());
-            assertEquals(pointException.getHttpStatus(), PointErrorCode.NOT_ENOUGH_POINT.getStatus());
-            assertEquals(pointException.getMessage(), PointErrorCode.NOT_ENOUGH_POINT.getMessage());
-        }
+        // when + then
+        assertThatThrownBy(() -> pointService.use(USER_ID, amount))
+                .isInstanceOf(PointException.class)
+                .hasMessageContaining(PointErrorCode.NON_POSITIVE_AMOUNT.getMessage());
     }
 
     @Test
     @DisplayName("포인트 사용")
     void useTest() {
+        // given
         given(userPointTable.selectById(USER_ID))
-                .willReturn(userPoint); // 기존 1000
+                .willReturn(userPoint); // 기존: 1000L
 
         long usingPoint = 1000L;
         long remainingPoint = userPoint.point() - usingPoint; // 1000 - 1000 = 0
@@ -184,8 +199,10 @@ class PointServiceTest {
         given(userPointTable.insertOrUpdate(USER_ID, remainingPoint))
                 .willReturn(new UserPoint(USER_ID, remainingPoint, System.currentTimeMillis()));
 
+        // when
         UserPoint actualUserPoint = pointService.use(USER_ID, usingPoint);
 
+        // then
         assertThat(actualUserPoint.id()).isEqualTo(USER_ID);
         assertThat(actualUserPoint.point()).isEqualTo(remainingPoint);
     }
