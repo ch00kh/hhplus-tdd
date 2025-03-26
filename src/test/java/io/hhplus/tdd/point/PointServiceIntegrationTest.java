@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,22 +31,33 @@ class PointServiceIntegrationTest {
 
         int threadCount = 3;
         CountDownLatch latch = new CountDownLatch(threadCount);
+        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
 
-        for (int i = 0; i < 3; i++) {
-            new Thread(() -> {
-                try {
-                    pointService.charge(USER_ID, 45000L);
+        executorService.execute(() -> {
+            pointService.charge(USER_ID, 50000L);
+            latch.countDown();
+        });
 
-                } catch (PointException e) {
-                    assertThat(e)
-                            .isInstanceOf(PointException.class)
-                            .hasMessageContaining(PointErrorCode.NOT_ENOUGH_POINT.getMessage());
-                } finally {
-                    latch.countDown();
-                }
-            }).start();
-        }
+        executorService.execute(() -> {
+            pointService.charge(USER_ID, 40000L);
+            latch.countDown();
+        });
+
+        executorService.execute(() -> {
+            try {
+                pointService.charge(USER_ID, 45000L);
+
+            } catch (PointException e) {
+                assertThat(e)
+                        .isInstanceOf(PointException.class)
+                        .hasMessageContaining(PointErrorCode.NOT_ENOUGH_POINT.getMessage());
+            } finally {
+                latch.countDown();
+            }
+        });
+
         latch.await();
+        executorService.shutdown();
 
         UserPoint actualUserPoint = pointService.findUserPoint(USER_ID);
         List<PointHistory> pointHistoryList = pointService.findPointHistory(USER_ID);
@@ -87,23 +100,36 @@ class PointServiceIntegrationTest {
         CountDownLatch latch = new CountDownLatch(threadCount);
 
         UserPoint userPoint = pointService.charge(USER_ID, 10000L);
+        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
 
-        for (int i = 0; i < threadCount; i++) {
-            new Thread(() -> {
-                try {
-                    pointService.use(userPoint.id(), 3000L);
+        executorService.execute(() -> {
+            pointService.use(userPoint.id(), 3000L);
+            latch.countDown();
+        });
 
-                } catch (PointException e) {
-                    assertThat(e)
-                            .isInstanceOf(PointException.class)
-                            .hasMessageContaining(PointErrorCode.NOT_ENOUGH_POINT.getMessage());
+        executorService.execute(() -> {
+            pointService.use(userPoint.id(), 3000L);
+            latch.countDown();
+        });
 
-                } finally {
-                    latch.countDown();
-                }
-            }).start();
-        }
+        executorService.execute(() -> {
+            pointService.use(userPoint.id(), 3000L);
+            latch.countDown();
+        });
+
+        executorService.execute(() -> {
+            try {
+                pointService.use(userPoint.id(), 3000L);
+            } catch (PointException e) {
+                assertThat(e).isInstanceOf(PointException.class)
+                        .hasMessageContaining(PointErrorCode.NOT_ENOUGH_POINT.getMessage());
+            } finally {
+                latch.countDown();
+            }
+        });
+
         latch.await();
+        executorService.shutdown();
 
         UserPoint actualUserPoint = pointService.findUserPoint(USER_ID);
         List<PointHistory> pointHistoryList = pointService.findPointHistory(USER_ID);
