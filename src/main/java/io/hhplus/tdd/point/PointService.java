@@ -26,7 +26,7 @@ public class PointService {
         return pointHistoryTable.selectAllByUserId(id);
     }
 
-    public UserPoint charge(Long id, Long amount) {
+    public UserPoint charge(long id, long amount) {
 
         if (amount <= 0) {
             throw new PointException(PointErrorCode.NON_POSITIVE_AMOUNT);
