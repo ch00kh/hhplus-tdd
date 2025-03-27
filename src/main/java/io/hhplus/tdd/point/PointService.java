@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.locks.Lock;
 
 @Service
 @RequiredArgsConstructor
@@ -13,6 +14,7 @@ public class PointService {
 
     private final UserPointTable userPointTable;
     private final PointHistoryTable pointHistoryTable;
+    private final LockManager lockManager;
 
     public UserPoint findUserPoint(Long id) {
 
@@ -24,24 +26,30 @@ public class PointService {
         return pointHistoryTable.selectAllByUserId(id);
     }
 
-    public UserPoint charge(Long id, Long amount) {
+    public UserPoint charge(long id, long amount) {
 
         if (amount <= 0) {
             throw new PointException(PointErrorCode.NON_POSITIVE_AMOUNT);
         }
 
-        UserPoint userPoint = userPointTable.selectById(id);
+        Lock lock = lockManager.getLock(id);
+        lock.lock();
+        try {
+            UserPoint userPoint = userPointTable.selectById(id);
 
+            long chargedPoint = userPoint.point() + amount;
 
-        long chargedPoint = userPoint.point() + amount;
+            if (chargedPoint > 100000L) {
+                throw new PointException(PointErrorCode.MAX_POINT_EXCEED);
+            }
 
-        if (chargedPoint > 100000L) {
-            throw new PointException(PointErrorCode.MAX_POINT_EXCEED);
+            pointHistoryTable.insert(id, amount, TransactionType.CHARGE, System.currentTimeMillis());
+
+            return userPointTable.insertOrUpdate(id, chargedPoint);
+
+        } finally {
+            lock.unlock();
         }
-
-        pointHistoryTable.insert(id, amount, TransactionType.CHARGE, System.currentTimeMillis());
-
-        return userPointTable.insertOrUpdate(id, chargedPoint);
     }
 
     public UserPoint use(long id, long amount) {
@@ -50,16 +58,23 @@ public class PointService {
             throw new PointException(PointErrorCode.NON_POSITIVE_AMOUNT);
         }
 
-        UserPoint userPoint = userPointTable.selectById(id);
-        long usedPoint = userPoint.point() - amount;
+        Lock lock = lockManager.getLock(id);
+        lock.lock();
+        try {
+            UserPoint userPoint = userPointTable.selectById(id);
+            long usedPoint = userPoint.point() - amount;
 
-        if (usedPoint < 0) {
-            throw new PointException(PointErrorCode.NOT_ENOUGH_POINT);
+            if (usedPoint < 0) {
+                throw new PointException(PointErrorCode.NOT_ENOUGH_POINT);
+            }
+
+            pointHistoryTable.insert(id, amount, TransactionType.USE, System.currentTimeMillis());
+
+            return userPointTable.insertOrUpdate(id, usedPoint);
+
+        } finally {
+            lock.unlock();
         }
-
-        pointHistoryTable.insert(id, amount, TransactionType.USE, System.currentTimeMillis());
-
-        return userPointTable.insertOrUpdate(id, usedPoint);
     }
 
 }
