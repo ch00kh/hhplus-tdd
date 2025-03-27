@@ -1,6 +1,9 @@
 package io.hhplus.tdd.point;
 
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
@@ -8,9 +11,6 @@ import org.springframework.test.annotation.DirtiesContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,50 +25,7 @@ class PointServiceIntegrationTest {
     PointService pointService;
 
     @Test
-    @DisplayName("포인트 충전(CountDownLatch) - 동시에 포인트 충전 후 최대 잔고값 넘어가면 예외 발생")
-    @Order(1)
-    void concurrentChargeTest_CountDownLatch() throws InterruptedException {
-
-        int threadCount = 3;
-        CountDownLatch latch = new CountDownLatch(threadCount);
-        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
-
-        executorService.execute(() -> {
-            pointService.charge(USER_ID, 50000L);
-            latch.countDown();
-        });
-
-        executorService.execute(() -> {
-            pointService.charge(USER_ID, 40000L);
-            latch.countDown();
-        });
-
-        executorService.execute(() -> {
-            try {
-                pointService.charge(USER_ID, 45000L);
-
-            } catch (PointException e) {
-                assertThat(e)
-                        .isInstanceOf(PointException.class)
-                        .hasMessageContaining(PointErrorCode.NOT_ENOUGH_POINT.getMessage());
-            } finally {
-                latch.countDown();
-            }
-        });
-
-        latch.await();
-        executorService.shutdown();
-
-        UserPoint actualUserPoint = pointService.findUserPoint(USER_ID);
-        List<PointHistory> pointHistoryList = pointService.findPointHistory(USER_ID);
-
-        assertThat(actualUserPoint.point()).isEqualTo(90000L);
-        assertThat(pointHistoryList.size()).isEqualTo(2);
-    }
-
-    @Test
-    @DisplayName("포인트 충전(CompletableFuture) - 동시에 포인트 충전 후 최대 잔고값 넘어가면 예외 발생")
-    @Order(2)
+    @DisplayName("포인트 충전 - 동시에 포인트 충전 후 최대 잔고값 넘어가면 예외 발생")
     void concurrentChargeTest_CompletableFuture() {
 
         CompletableFuture.allOf(
@@ -92,55 +49,7 @@ class PointServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("포인트 충전 & 사용 (CountDownLatch) - 10000 포인트 충전 후 포인트 사용 시 포인트가 부족하면 예외 발생")
-    @Order(3)
-    void concurrentUseTest_CountDownLatch() throws InterruptedException {
-
-        int threadCount = 4;
-        CountDownLatch latch = new CountDownLatch(threadCount);
-
-        UserPoint userPoint = pointService.charge(USER_ID, 10000L);
-        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
-
-        executorService.execute(() -> {
-            pointService.use(userPoint.id(), 3000L);
-            latch.countDown();
-        });
-
-        executorService.execute(() -> {
-            pointService.use(userPoint.id(), 3000L);
-            latch.countDown();
-        });
-
-        executorService.execute(() -> {
-            pointService.use(userPoint.id(), 3000L);
-            latch.countDown();
-        });
-
-        executorService.execute(() -> {
-            try {
-                pointService.use(userPoint.id(), 3000L);
-            } catch (PointException e) {
-                assertThat(e).isInstanceOf(PointException.class)
-                        .hasMessageContaining(PointErrorCode.NOT_ENOUGH_POINT.getMessage());
-            } finally {
-                latch.countDown();
-            }
-        });
-
-        latch.await();
-        executorService.shutdown();
-
-        UserPoint actualUserPoint = pointService.findUserPoint(USER_ID);
-        List<PointHistory> pointHistoryList = pointService.findPointHistory(USER_ID);
-
-        assertThat(actualUserPoint.point()).isEqualTo(1000L);
-        assertThat(pointHistoryList.size()).isEqualTo(4);
-    }
-
-    @Test
-    @DisplayName("포인트 충전 & 사용 (CompletableFuture) - 10000 포인트 충전 후 포인트 사용 시 포인트가 부족하면 예외 발생")
-    @Order(4)
+    @DisplayName("포인트 충전 & 사용 - 10000 포인트 충전 후 포인트 사용 시 포인트가 부족하면 예외 발생")
     void concurrentUseTest_CompletableFuture() {
 
         CompletableFuture.allOf(
@@ -167,7 +76,6 @@ class PointServiceIntegrationTest {
 
     @Test
     @DisplayName("동시 충전 혹은 동시 요청 테스트")
-    @Order(5)
     void concurrentVariousTasksTest() {
 
         CompletableFuture.allOf(
